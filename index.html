@@ -1662,7 +1662,7 @@
         }
 
         // ============================================================
-        //  LOAD DATA
+        //  LOAD DATA - النسخة المعدلة بالكامل
         // ============================================================
         async function loadPreviousGames() {
             const cached = getCache("games");
@@ -1678,11 +1678,36 @@
                 const data = await res.json();
                 const finished = (data.games || []).filter(g => g.finished === "TRUE");
                 console.log("✅ المباريات المنتهية:", finished.length);
+                
                 state.previousGamesData = finished.map(g => {
                     const homeRaw = g.home_team_name_en || g.home_team_name_fa || '';
                     const awayRaw = g.away_team_name_en || g.away_team_name_fa || '';
                     let homeName = translateToArabic(homeRaw);
                     let awayName = translateToArabic(awayRaw);
+                    
+                    // ============================================================
+                    //  التعديل الأساسي: قراءة بيانات ضربات الجزاء بشكل صحيح
+                    // ============================================================
+                    // الـ API يستخدم هذه الحقول:
+                    // - home_penalty_score  (عدد ضربات الجزاء التي سجلها الفريق المضيف)
+                    // - away_penalty_score  (عدد ضربات الجزاء التي سجلها الفريق الضيف)
+                    // - home_penalty_scorers (أسماء مسجلي ضربات الجزاء للفريق المضيف)
+                    // - away_penalty_scorers (أسماء مسجلي ضربات الجزاء للفريق الضيف)
+                    // - home_penalty_misses  (أسماء من أضاع ضربات جزاء للفريق المضيف)
+                    // - away_penalty_misses  (أسماء من أضاع ضربات جزاء للفريق الضيف)
+                    
+                    // تحويل قيم ضربات الجزاء إلى أرقام
+                    const homePenalty = g.home_penalty_score ? parseInt(g.home_penalty_score) : null;
+                    const awayPenalty = g.away_penalty_score ? parseInt(g.away_penalty_score) : null;
+                    
+                    // تحديد وجود ضربات جزاء بناءً على وجود القيم
+                    const hadPenalties = (homePenalty !== null && awayPenalty !== null);
+                    
+                    // ============================================================
+                    //  معالجة خاصة لمباراة مصر وأستراليا (مثال)
+                    // ============================================================
+                    // هذه المعالجة تبقى كما هي للمباريات التي قد لا تحتوي على بيانات
+                    // ضربات جزاء في الـ API
                     if ((homeName === "مصر" && awayName === "أستراليا") ||
                         (homeName === "أستراليا" && awayName === "مصر")) {
                         return {
@@ -1696,19 +1721,36 @@
                             sortTimestamp: new Date(g.local_date || '').getTime() || 0
                         };
                     }
+                    
+                    // ============================================================
+                    //  إرجاع الكائن مع البيانات الصحيحة
+                    // ============================================================
                     return {
                         homeAr: homeName,
                         awayAr: awayName,
                         homeScore: parseInt(g.home_score || 0),
                         awayScore: parseInt(g.away_score || 0),
-                        homePenalty: g.home_penalty ? parseInt(g.home_penalty) : null,
-                        awayPenalty: g.away_penalty ? parseInt(g.away_penalty) : null,
-                        hadPenalties: g.had_penalties === "TRUE" || g.had_penalties === true,
+                        homePenalty: homePenalty,      // <-- الآن تقرأ من home_penalty_score
+                        awayPenalty: awayPenalty,      // <-- الآن تقرأ من away_penalty_score
+                        hadPenalties: hadPenalties,    // <-- يتم تحديدها تلقائياً
                         sortTimestamp: new Date(g.local_date || '').getTime() || 0
                     };
                 });
+                
                 setCache("games", state.previousGamesData);
                 console.log("✅ تم حفظ المباريات:", state.previousGamesData.length);
+                
+                // ============================================================
+                //  طباعة تفاصيل مباراة سويسرا وكولومبيا للتأكد
+                // ============================================================
+                const swissColombia = state.previousGamesData.find(m => 
+                    (m.homeAr === "سويسرا" && m.awayAr === "كولومبيا") ||
+                    (m.homeAr === "كولومبيا" && m.awayAr === "سويسرا")
+                );
+                if (swissColombia) {
+                    console.log("✅ مباراة سويسرا vs كولومبيا:", swissColombia);
+                }
+                
             } catch (e) {
                 console.warn("⚠️ فشل تحميل المباريات:", e);
                 state.previousGamesData = [];
@@ -1802,15 +1844,39 @@
             return null;
         }
 
+        // ============================================================
+        //  DETERMINE WINNER - النسخة المعدلة
+        // ============================================================
         function determineWinner(result) {
             if (!result) return null;
+            
+            // ============================================================
+            //  الخطوة 1: التحقق من ضربات الجزاء
+            // ============================================================
+            // إذا كانت المباراة حُسمت بضربات جزاء، نستخدمها لتحديد الفائز
             if (result.hadPenalties && result.homePenalty !== null && result.awayPenalty !== null) {
-                if (parseInt(result.homePenalty) > parseInt(result.awayPenalty)) return result.homeAr;
-                else if (parseInt(result.awayPenalty) > parseInt(result.homePenalty)) return result.awayAr;
+                if (parseInt(result.homePenalty) > parseInt(result.awayPenalty)) {
+                    return result.homeAr;  // الفريق المضيف فاز بضربات الجزاء
+                } else if (parseInt(result.awayPenalty) > parseInt(result.homePenalty)) {
+                    return result.awayAr;  // الفريق الضيف فاز بضربات الجزاء
+                }
+                // في حالة نادرة: تعادل في ضربات الجزاء (يستمرون حتى يحسمونها)
                 return null;
             }
-            if (result.homeScore > result.awayScore) return result.homeAr;
-            else if (result.awayScore > result.homeScore) return result.awayAr;
+            
+            // ============================================================
+            //  الخطوة 2: الحالة العادية (بدون ضربات جزاء)
+            // ============================================================
+            if (result.homeScore > result.awayScore) {
+                return result.homeAr;
+            } else if (result.awayScore > result.homeScore) {
+                return result.awayAr;
+            }
+            
+            // ============================================================
+            //  الخطوة 3: تعادل بدون ضربات جزاء
+            // ============================================================
+            // في حالة التعادل بدون ضربات جزاء، لا يوجد فائز
             return null;
         }
 
