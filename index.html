@@ -1235,7 +1235,7 @@
 
     <div class="app-container">
 
-        <!-- ===== HEADER – بدون أي عبارات ===== -->
+        <!-- ===== HEADER ===== -->
         <div class="header">
             <div class="actions">
                 <button id="themeToggle" onclick="toggleTheme()">🌙</button>
@@ -1812,7 +1812,7 @@
         }
 
         // ============================================================
-        //  DETERMINE WINNER - مع دعم HOME/AWAY
+        //  DETERMINE WINNER
         // ============================================================
         function determineWinner(result) {
             if (!result) return null;
@@ -1854,37 +1854,31 @@
             }
         }
 
-        function getPredictionStatus(prediction) {
-            if (!prediction || !prediction.match_id) {
-                return { status: 'pending', text: '⏳ مباراة غير معروفة' };
-            }
-            const parts = prediction.match_id.split('_');
-            if (parts.length < 3) {
-                return { status: 'pending', text: '⏳ بيانات غير مكتملة' };
-            }
+        // ============================================================
+        //  حساب النقاط بشكل صحيح
+        // ============================================================
+        function calculatePlayerScore(prediction) {
+            const parts = (prediction.match_id || "").split("_");
+            if (parts.length < 3) return { isCorrect: false, predictionTeam: null, winner: null };
+            
             const result = findMatchResult(parts[1], parts[2]);
-            if (!result) {
-                return { status: 'pending', text: '⏳ لم تلعب بعد' };
-            }
-            const correctResult = determineWinner(result);
+            if (!result) return { isCorrect: false, predictionTeam: null, winner: null };
+            
+            const winner = determineWinner(result);
             const predictionTeam = resolvePredictionTeam(prediction.prediction, result);
             
-            if (!correctResult) {
-                if (predictionTeam === 'DRAW') {
-                    return { status: 'correct', text: '✅ صحيح (تعادل)' };
-                } else {
-                    return { status: 'wrong', text: '❌ خاطئ (تعادل)' };
-                }
-            }
-            if (predictionTeam === correctResult) {
-                return { status: 'correct', text: `✅ صحيح (${correctResult})` };
+            let isCorrect = false;
+            if (winner === null) {
+                isCorrect = predictionTeam === 'DRAW';
             } else {
-                return { status: 'wrong', text: `❌ خاطئ (الفائز: ${correctResult})` };
+                isCorrect = predictionTeam === winner;
             }
+            
+            return { isCorrect, predictionTeam, winner };
         }
 
         // ============================================================
-        //  حساب بيانات اللاعبين - مع دعم HOME/AWAY
+        //  حساب بيانات اللاعبين
         // ============================================================
         function calculatePlayersData() {
             const predictions = state.predictions || [];
@@ -1899,28 +1893,14 @@
                 scores[p.user_name].total++;
                 scores[p.user_name].predictions.push(p);
                 
-                const parts = (p.match_id || "").split("_");
-                if (parts.length < 3) continue;
-                
-                const result = findMatchResult(parts[1], parts[2]);
-                if (!result) continue;
-                
-                const winner = determineWinner(result);
-                const predictionTeam = resolvePredictionTeam(p.prediction, result);
-                let isCorrect = false;
-                
-                if (winner === null) {
-                    isCorrect = predictionTeam === 'DRAW';
-                } else {
-                    isCorrect = predictionTeam === winner;
-                }
-                
-                if (isCorrect) {
+                const result = calculatePlayerScore(p);
+                if (result.isCorrect) {
                     scores[p.user_name].points++;
                     scores[p.user_name].correct++;
-                } else {
+                } else if (result.predictionTeam !== null) {
                     scores[p.user_name].wrong++;
                 }
+                // إذا كان predictionTeam null، لا نحسبها كصحيحة ولا خاطئة
             }
 
             const board = Object.values(scores).sort((a, b) => b.points - a.points || (b.correct - a.correct));
@@ -1963,14 +1943,6 @@
         //  اللقب الواحد لكل لاعب
         // ============================================================
         function getPlayerTitle(player, index, totalPlayers) {
-            const titles = [
-                { minPoints: 20, label: '👑 محنك' },
-                { minPoints: 15, label: '🧠 استراتيجي' },
-                { minPoints: 10, label: '⚡ مغامر' },
-                { minPoints: 5, label: '🎯 فاهم' },
-                { minPoints: 0, label: '🌱 متعلم' }
-            ];
-
             const acc = player.total > 0 ? Math.round((player.correct / player.total) * 100) : 0;
 
             if (acc >= 80 && player.total >= 5) return '🧠 فاهم';
@@ -1992,8 +1964,37 @@
             return randomTitles[titleIndex];
         }
 
+        function getPredictionStatus(prediction) {
+            if (!prediction || !prediction.match_id) {
+                return { status: 'pending', text: '⏳ مباراة غير معروفة' };
+            }
+            const parts = prediction.match_id.split('_');
+            if (parts.length < 3) {
+                return { status: 'pending', text: '⏳ بيانات غير مكتملة' };
+            }
+            const result = findMatchResult(parts[1], parts[2]);
+            if (!result) {
+                return { status: 'pending', text: '⏳ لم تلعب بعد' };
+            }
+            const winner = determineWinner(result);
+            const predictionTeam = resolvePredictionTeam(prediction.prediction, result);
+            
+            if (!winner) {
+                if (predictionTeam === 'DRAW') {
+                    return { status: 'correct', text: '✅ صحيح (تعادل)' };
+                } else {
+                    return { status: 'wrong', text: '❌ خاطئ (تعادل)' };
+                }
+            }
+            if (predictionTeam === winner) {
+                return { status: 'correct', text: `✅ صحيح (${winner})` };
+            } else {
+                return { status: 'wrong', text: `❌ خاطئ (الفائز: ${winner})` };
+            }
+        }
+
         // ============================================================
-        //  RENDER LEADERBOARD - مع دعم HOME/AWAY
+        //  RENDER LEADERBOARD
         // ============================================================
         function setLeaderboardPeriod(period) {
             currentLeaderboardPeriod = period;
@@ -2005,53 +2006,19 @@
 
         function renderLeaderboard(period) {
             const container = document.getElementById("leaderboardContainer");
-            const predictions = state.predictions || [];
-            const games = state.previousGamesData || [];
-            if (predictions.length === 0 || games.length === 0) {
+            const data = calculatePlayersData();
+            const board = data.board || [];
+            
+            if (board.length === 0) {
                 container.innerHTML =
                     `<div class="empty-state"><span class="icon">📭</span> لا توجد بيانات كافية<br><small style="color:var(--text-muted);font-size:0.6rem;">تأكد من وجود توقعات ومباريات</small></div>`;
                 document.getElementById('lbTotalPlayers').textContent = '0';
-                document.getElementById('lbTotalPredictions').textContent = predictions.length;
+                document.getElementById('lbTotalPredictions').textContent = state.predictions.length;
                 return;
             }
 
-            const scores = {};
-            let totalPredictions = 0;
-            for (let p of predictions) {
-                totalPredictions++;
-                if (!scores[p.user_name]) {
-                    scores[p.user_name] = { name: p.user_name, points: 0, correct: 0, wrong: 0, total: 0, predictions: [] };
-                }
-                scores[p.user_name].total++;
-                scores[p.user_name].predictions.push(p);
-                
-                const parts = (p.match_id || "").split("_");
-                if (parts.length < 3) continue;
-                
-                const result = findMatchResult(parts[1], parts[2]);
-                if (!result) continue;
-                
-                const winner = determineWinner(result);
-                const predictionTeam = resolvePredictionTeam(p.prediction, result);
-                let isCorrect = false;
-                
-                if (winner === null) {
-                    isCorrect = predictionTeam === 'DRAW';
-                } else {
-                    isCorrect = predictionTeam === winner;
-                }
-                
-                if (isCorrect) {
-                    scores[p.user_name].points++;
-                    scores[p.user_name].correct++;
-                } else {
-                    scores[p.user_name].wrong++;
-                }
-            }
-
-            const board = Object.values(scores).sort((a, b) => b.points - a.points || (b.correct - a.correct));
             document.getElementById('lbTotalPlayers').textContent = board.length;
-            document.getElementById('lbTotalPredictions').textContent = totalPredictions;
+            document.getElementById('lbTotalPredictions').textContent = data.totalPredictions;
 
             let rank = 1,
                 i = 0;
@@ -2185,7 +2152,7 @@
         }
 
         // ============================================================
-        //  CHART – تقدم النقاط
+        //  CHART
         // ============================================================
         function updateChartDropdown() {
             const select = document.getElementById('chartPlayerSelect');
@@ -2253,22 +2220,10 @@
             });
 
             for (let p of sortedPredictions) {
+                const score = calculatePlayerScore(p);
+                if (score.isCorrect) cumulativePoints++;
                 const parts = (p.match_id || "").split("_");
-                if (parts.length < 3) continue;
-                const result = findMatchResult(parts[1], parts[2]);
-                if (!result) continue;
-                const winner = determineWinner(result);
-                const predictionTeam = resolvePredictionTeam(p.prediction, result);
-                let isCorrect = false;
-                
-                if (winner === null) {
-                    isCorrect = predictionTeam === 'DRAW';
-                } else {
-                    isCorrect = predictionTeam === winner;
-                }
-                
-                if (isCorrect) cumulativePoints++;
-                const matchLabel = `${parts[1]?.slice(0,4)||'?'} vs ${parts[2]?.slice(0,4)||'?'}`;
+                const matchLabel = parts.length >= 3 ? `${parts[1]?.slice(0,4)||'?'} vs ${parts[2]?.slice(0,4)||'?'}` : 'مباراة';
                 labels.push(matchLabel);
                 pointsData.push(cumulativePoints);
             }
@@ -2491,7 +2446,7 @@
         }
 
         // ============================================================
-        //  OPEN PLAYER PREDICTIONS - مع دعم HOME/AWAY
+        //  OPEN PLAYER PREDICTIONS
         // ============================================================
         async function openPlayerPredictions(userName) {
             if (!userName) { showToast('⚠️ اسم المستخدم غير معروف'); return; }
@@ -2541,15 +2496,8 @@
             const allPredictions = state.predictions || [];
             for (let p of allPredictions) {
                 if (!allScores[p.user_name]) allScores[p.user_name] = { points: 0 };
-                const parts = (p.match_id || "").split("_");
-                if (parts.length < 3) continue;
-                const result = findMatchResult(parts[1], parts[2]);
-                if (!result) continue;
-                const winner = determineWinner(result);
-                const predictionTeam = resolvePredictionTeam(p.prediction, result);
-                let isCorrect = false;
-                if (winner === null) { isCorrect = predictionTeam === 'DRAW'; } else { isCorrect = predictionTeam === winner; }
-                if (isCorrect) allScores[p.user_name].points++;
+                const score = calculatePlayerScore(p);
+                if (score.isCorrect) allScores[p.user_name].points++;
             }
             const sorted = Object.entries(allScores).sort((a, b) => b[1].points - a[1].points);
             const rank = sorted.findIndex(([name]) => name === userName) + 1;
@@ -2563,21 +2511,16 @@
                 const team1Ar = translateToArabic(team1Raw);
                 const team2Ar = translateToArabic(team2Raw);
                 let predText = '';
-                const predictionTeam = resolvePredictionTeam(p.prediction, { homeAr: team1Ar, awayAr: team2Ar });
+                const result = findMatchResult(team1Raw, team2Raw);
+                const predictionTeam = resolvePredictionTeam(p.prediction, result);
                 if (predictionTeam === 'DRAW') {
                     predText = '🤝 تعادل';
-                } else if (predictionTeam === 'HOME') {
+                } else if (predictionTeam === team1Ar) {
                     predText = `🏆 فوز ${getFlag(team1Ar)} ${team1Ar}`;
-                } else if (predictionTeam === 'AWAY') {
+                } else if (predictionTeam === team2Ar) {
                     predText = `🏆 فوز ${getFlag(team2Ar)} ${team2Ar}`;
                 } else if (predictionTeam) {
-                    if (predictionTeam === team1Ar) {
-                        predText = `🏆 فوز ${getFlag(team1Ar)} ${team1Ar}`;
-                    } else if (predictionTeam === team2Ar) {
-                        predText = `🏆 فوز ${getFlag(team2Ar)} ${team2Ar}`;
-                    } else {
-                        predText = `🔮 ${predictionTeam}`;
-                    }
+                    predText = `🔮 ${predictionTeam}`;
                 } else {
                     predText = `🔮 ${p.prediction || '?'}`;
                 }
