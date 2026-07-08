@@ -1662,7 +1662,7 @@
         }
 
         // ============================================================
-        //  LOAD DATA - النسخة المعدلة بالكامل
+        //  LOAD DATA
         // ============================================================
         async function loadPreviousGames() {
             const cached = getCache("games");
@@ -1685,29 +1685,10 @@
                     let homeName = translateToArabic(homeRaw);
                     let awayName = translateToArabic(awayRaw);
                     
-                    // ============================================================
-                    //  التعديل الأساسي: قراءة بيانات ضربات الجزاء بشكل صحيح
-                    // ============================================================
-                    // الـ API يستخدم هذه الحقول:
-                    // - home_penalty_score  (عدد ضربات الجزاء التي سجلها الفريق المضيف)
-                    // - away_penalty_score  (عدد ضربات الجزاء التي سجلها الفريق الضيف)
-                    // - home_penalty_scorers (أسماء مسجلي ضربات الجزاء للفريق المضيف)
-                    // - away_penalty_scorers (أسماء مسجلي ضربات الجزاء للفريق الضيف)
-                    // - home_penalty_misses  (أسماء من أضاع ضربات جزاء للفريق المضيف)
-                    // - away_penalty_misses  (أسماء من أضاع ضربات جزاء للفريق الضيف)
-                    
-                    // تحويل قيم ضربات الجزاء إلى أرقام
                     const homePenalty = g.home_penalty_score ? parseInt(g.home_penalty_score) : null;
                     const awayPenalty = g.away_penalty_score ? parseInt(g.away_penalty_score) : null;
-                    
-                    // تحديد وجود ضربات جزاء بناءً على وجود القيم
                     const hadPenalties = (homePenalty !== null && awayPenalty !== null);
                     
-                    // ============================================================
-                    //  معالجة خاصة لمباراة مصر وأستراليا (مثال)
-                    // ============================================================
-                    // هذه المعالجة تبقى كما هي للمباريات التي قد لا تحتوي على بيانات
-                    // ضربات جزاء في الـ API
                     if ((homeName === "مصر" && awayName === "أستراليا") ||
                         (homeName === "أستراليا" && awayName === "مصر")) {
                         return {
@@ -1722,34 +1703,20 @@
                         };
                     }
                     
-                    // ============================================================
-                    //  إرجاع الكائن مع البيانات الصحيحة
-                    // ============================================================
                     return {
                         homeAr: homeName,
                         awayAr: awayName,
                         homeScore: parseInt(g.home_score || 0),
                         awayScore: parseInt(g.away_score || 0),
-                        homePenalty: homePenalty,      // <-- الآن تقرأ من home_penalty_score
-                        awayPenalty: awayPenalty,      // <-- الآن تقرأ من away_penalty_score
-                        hadPenalties: hadPenalties,    // <-- يتم تحديدها تلقائياً
+                        homePenalty: homePenalty,
+                        awayPenalty: awayPenalty,
+                        hadPenalties: hadPenalties,
                         sortTimestamp: new Date(g.local_date || '').getTime() || 0
                     };
                 });
                 
                 setCache("games", state.previousGamesData);
                 console.log("✅ تم حفظ المباريات:", state.previousGamesData.length);
-                
-                // ============================================================
-                //  طباعة تفاصيل مباراة سويسرا وكولومبيا للتأكد
-                // ============================================================
-                const swissColombia = state.previousGamesData.find(m => 
-                    (m.homeAr === "سويسرا" && m.awayAr === "كولومبيا") ||
-                    (m.homeAr === "كولومبيا" && m.awayAr === "سويسرا")
-                );
-                if (swissColombia) {
-                    console.log("✅ مباراة سويسرا vs كولومبيا:", swissColombia);
-                }
                 
             } catch (e) {
                 console.warn("⚠️ فشل تحميل المباريات:", e);
@@ -1845,39 +1812,46 @@
         }
 
         // ============================================================
-        //  DETERMINE WINNER - النسخة المعدلة
+        //  DETERMINE WINNER - مع دعم HOME/AWAY
         // ============================================================
         function determineWinner(result) {
             if (!result) return null;
             
-            // ============================================================
-            //  الخطوة 1: التحقق من ضربات الجزاء
-            // ============================================================
-            // إذا كانت المباراة حُسمت بضربات جزاء، نستخدمها لتحديد الفائز
             if (result.hadPenalties && result.homePenalty !== null && result.awayPenalty !== null) {
                 if (parseInt(result.homePenalty) > parseInt(result.awayPenalty)) {
-                    return result.homeAr;  // الفريق المضيف فاز بضربات الجزاء
+                    return result.homeAr;
                 } else if (parseInt(result.awayPenalty) > parseInt(result.homePenalty)) {
-                    return result.awayAr;  // الفريق الضيف فاز بضربات الجزاء
+                    return result.awayAr;
                 }
-                // في حالة نادرة: تعادل في ضربات الجزاء (يستمرون حتى يحسمونها)
                 return null;
             }
             
-            // ============================================================
-            //  الخطوة 2: الحالة العادية (بدون ضربات جزاء)
-            // ============================================================
             if (result.homeScore > result.awayScore) {
                 return result.homeAr;
             } else if (result.awayScore > result.homeScore) {
                 return result.awayAr;
             }
             
-            // ============================================================
-            //  الخطوة 3: تعادل بدون ضربات جزاء
-            // ============================================================
-            // في حالة التعادل بدون ضربات جزاء، لا يوجد فائز
             return null;
+        }
+
+        // ============================================================
+        //  معالجة التوقع - تحويل HOME/AWAY إلى أسماء الفرق
+        // ============================================================
+        function resolvePredictionTeam(prediction, result) {
+            if (!prediction) return null;
+            
+            // إذا كان التوقع HOME أو AWAY
+            if (prediction === 'HOME') {
+                return result ? result.homeAr : 'HOME';
+            } else if (prediction === 'AWAY') {
+                return result ? result.awayAr : 'AWAY';
+            } else if (prediction === 'DRAW') {
+                return 'DRAW';
+            } else {
+                // ترجمة اسم الفريق إذا لزم الأمر
+                return translateToArabic(prediction);
+            }
         }
 
         function getPredictionStatus(prediction) {
@@ -1893,10 +1867,8 @@
                 return { status: 'pending', text: '⏳ لم تلعب بعد' };
             }
             const correctResult = determineWinner(result);
-            let predictionTeam = prediction.prediction;
-            if (predictionTeam !== 'DRAW') {
-                predictionTeam = translateToArabic(predictionTeam);
-            }
+            const predictionTeam = resolvePredictionTeam(prediction.prediction, result);
+            
             if (!correctResult) {
                 if (predictionTeam === 'DRAW') {
                     return { status: 'correct', text: '✅ صحيح (تعادل)' };
@@ -1912,7 +1884,7 @@
         }
 
         // ============================================================
-        //  حساب بيانات اللاعبين
+        //  حساب بيانات اللاعبين - مع دعم HOME/AWAY
         // ============================================================
         function calculatePlayersData() {
             const predictions = state.predictions || [];
@@ -1922,26 +1894,27 @@
             for (let p of predictions) {
                 totalPredictions++;
                 if (!scores[p.user_name]) {
-                    scores[p.user_name] = { name: p.user_name, points: 0, correct: 0, wrong: 0, total: 0,
-                    predictions: [] };
+                    scores[p.user_name] = { name: p.user_name, points: 0, correct: 0, wrong: 0, total: 0, predictions: [] };
                 }
                 scores[p.user_name].total++;
                 scores[p.user_name].predictions.push(p);
+                
                 const parts = (p.match_id || "").split("_");
                 if (parts.length < 3) continue;
+                
                 const result = findMatchResult(parts[1], parts[2]);
                 if (!result) continue;
+                
                 const winner = determineWinner(result);
+                const predictionTeam = resolvePredictionTeam(p.prediction, result);
                 let isCorrect = false;
-                let predictionTeam = p.prediction;
-                if (predictionTeam !== 'DRAW') {
-                    predictionTeam = translateToArabic(predictionTeam);
-                }
+                
                 if (winner === null) {
                     isCorrect = predictionTeam === 'DRAW';
                 } else {
                     isCorrect = predictionTeam === winner;
                 }
+                
                 if (isCorrect) {
                     scores[p.user_name].points++;
                     scores[p.user_name].correct++;
@@ -1987,10 +1960,9 @@
         }
 
         // ============================================================
-        //  اللقب الواحد لكل لاعب (مختلف عن غيره)
+        //  اللقب الواحد لكل لاعب
         // ============================================================
         function getPlayerTitle(player, index, totalPlayers) {
-            // ألقاب متنوعة
             const titles = [
                 { minPoints: 20, label: '👑 محنك' },
                 { minPoints: 15, label: '🧠 استراتيجي' },
@@ -1999,34 +1971,29 @@
                 { minPoints: 0, label: '🌱 متعلم' }
             ];
 
-            // ألقاب خاصة بناءً على الدقة
             const acc = player.total > 0 ? Math.round((player.correct / player.total) * 100) : 0;
 
-            // ترتيب الأولوية: الدقة العالية أولاً
             if (acc >= 80 && player.total >= 5) return '🧠 فاهم';
             if (acc >= 70 && player.total >= 5) return '🎯 استراتيجي';
             if (player.points >= 15) return '⚡ محنك';
             if (player.points >= 8) return '🔥 مغامر';
             if (player.total >= 10) return '📚 متابع';
 
-            // ألقاب مميزة حسب الترتيب
             if (index === 0) return '👑 البطل';
             if (index === 1) return '🥈 الوصيف';
             if (index === 2) return '🥉 الثالث';
 
-            // ألقاب عشوائية مميزة
             const randomTitles = [
                 '🧠 المحلل', '🎯 الصياد', '⚡ البرق', '🔥 النار',
                 '🌊 الموج', '🏔️ الصخر', '🌟 النجم', '💎 الماس'
             ];
 
-            // استخدام فهرس اللاعب لتحديد لقب ثابت
             const titleIndex = index % randomTitles.length;
             return randomTitles[titleIndex];
         }
 
         // ============================================================
-        //  RENDER LEADERBOARD
+        //  RENDER LEADERBOARD - مع دعم HOME/AWAY
         // ============================================================
         function setLeaderboardPeriod(period) {
             currentLeaderboardPeriod = period;
@@ -2053,26 +2020,27 @@
             for (let p of predictions) {
                 totalPredictions++;
                 if (!scores[p.user_name]) {
-                    scores[p.user_name] = { name: p.user_name, points: 0, correct: 0, wrong: 0, total: 0,
-                    predictions: [] };
+                    scores[p.user_name] = { name: p.user_name, points: 0, correct: 0, wrong: 0, total: 0, predictions: [] };
                 }
                 scores[p.user_name].total++;
                 scores[p.user_name].predictions.push(p);
+                
                 const parts = (p.match_id || "").split("_");
                 if (parts.length < 3) continue;
+                
                 const result = findMatchResult(parts[1], parts[2]);
                 if (!result) continue;
+                
                 const winner = determineWinner(result);
+                const predictionTeam = resolvePredictionTeam(p.prediction, result);
                 let isCorrect = false;
-                let predictionTeam = p.prediction;
-                if (predictionTeam !== 'DRAW') {
-                    predictionTeam = translateToArabic(predictionTeam);
-                }
+                
                 if (winner === null) {
                     isCorrect = predictionTeam === 'DRAW';
                 } else {
                     isCorrect = predictionTeam === winner;
                 }
+                
                 if (isCorrect) {
                     scores[p.user_name].points++;
                     scores[p.user_name].correct++;
@@ -2290,16 +2258,15 @@
                 const result = findMatchResult(parts[1], parts[2]);
                 if (!result) continue;
                 const winner = determineWinner(result);
+                const predictionTeam = resolvePredictionTeam(p.prediction, result);
                 let isCorrect = false;
-                let predictionTeam = p.prediction;
-                if (predictionTeam !== 'DRAW') {
-                    predictionTeam = translateToArabic(predictionTeam);
-                }
+                
                 if (winner === null) {
                     isCorrect = predictionTeam === 'DRAW';
                 } else {
                     isCorrect = predictionTeam === winner;
                 }
+                
                 if (isCorrect) cumulativePoints++;
                 const matchLabel = `${parts[1]?.slice(0,4)||'?'} vs ${parts[2]?.slice(0,4)||'?'}`;
                 labels.push(matchLabel);
@@ -2524,7 +2491,7 @@
         }
 
         // ============================================================
-        //  OPEN PLAYER PREDICTIONS
+        //  OPEN PLAYER PREDICTIONS - مع دعم HOME/AWAY
         // ============================================================
         async function openPlayerPredictions(userName) {
             if (!userName) { showToast('⚠️ اسم المستخدم غير معروف'); return; }
@@ -2579,11 +2546,9 @@
                 const result = findMatchResult(parts[1], parts[2]);
                 if (!result) continue;
                 const winner = determineWinner(result);
+                const predictionTeam = resolvePredictionTeam(p.prediction, result);
                 let isCorrect = false;
-                let predictionTeam = p.prediction;
-                if (predictionTeam !== 'DRAW') predictionTeam = translateToArabic(predictionTeam);
-                if (winner === null) { isCorrect = predictionTeam === 'DRAW'; } else { isCorrect = predictionTeam ===
-                        winner; }
+                if (winner === null) { isCorrect = predictionTeam === 'DRAW'; } else { isCorrect = predictionTeam === winner; }
                 if (isCorrect) allScores[p.user_name].points++;
             }
             const sorted = Object.entries(allScores).sort((a, b) => b[1].points - a[1].points);
@@ -2598,18 +2563,23 @@
                 const team1Ar = translateToArabic(team1Raw);
                 const team2Ar = translateToArabic(team2Raw);
                 let predText = '';
-                let predictionTeam = p.prediction;
+                const predictionTeam = resolvePredictionTeam(p.prediction, { homeAr: team1Ar, awayAr: team2Ar });
                 if (predictionTeam === 'DRAW') {
                     predText = '🤝 تعادل';
-                } else {
-                    const predTeamAr = translateToArabic(predictionTeam);
-                    if (predTeamAr === team1Ar) {
+                } else if (predictionTeam === 'HOME') {
+                    predText = `🏆 فوز ${getFlag(team1Ar)} ${team1Ar}`;
+                } else if (predictionTeam === 'AWAY') {
+                    predText = `🏆 فوز ${getFlag(team2Ar)} ${team2Ar}`;
+                } else if (predictionTeam) {
+                    if (predictionTeam === team1Ar) {
                         predText = `🏆 فوز ${getFlag(team1Ar)} ${team1Ar}`;
-                    } else if (predTeamAr === team2Ar) {
+                    } else if (predictionTeam === team2Ar) {
                         predText = `🏆 فوز ${getFlag(team2Ar)} ${team2Ar}`;
                     } else {
                         predText = `🔮 ${predictionTeam}`;
                     }
+                } else {
+                    predText = `🔮 ${p.prediction || '?'}`;
                 }
                 const status = p.status;
                 let statusClass = 'pending',
