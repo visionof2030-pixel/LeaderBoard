@@ -1009,7 +1009,7 @@
             font-weight: 600;
         }
 
-        /* ===== CHARTS GRID – 6 charts ===== */
+        /* ===== CHARTS GRID – 6 رسوم بيانية تركز على أداء المتسابقين ===== */
         .charts-grid {
             display: grid;
             grid-template-columns: 1fr 1fr 1fr;
@@ -1443,23 +1443,23 @@
             </div>
         </div>
 
-        <!-- تبويب الرسوم البيانية – 6 رسوم متنوعة -->
+        <!-- تبويب الرسوم البيانية – 6 رسوم تركز على أداء المتسابقين -->
         <div class="tab-content" id="tab-charts">
             <div class="stats-advanced" style="border:1px solid var(--border-gold);border-radius:var(--radius-lg);padding:16px;background:var(--bg-card);box-shadow:var(--shadow-card);">
-                <h3 style="text-align:center;font-size:0.9rem;color:var(--gold-light);margin-bottom:10px;">📈 رسوم بيانية متقدمة</h3>
+                <h3 style="text-align:center;font-size:0.9rem;color:var(--gold-light);margin-bottom:10px;">📈 أداء المتسابقين</h3>
                 <div class="charts-grid">
-                    <!-- 1. توزيع النتائج (فوز/تعادل/خسارة) للفرق المتبقية -->
-                    <div class="chart-box"><div class="chart-title">🏆 نتائج الفرق المتبقية</div><canvas id="chartTeamResults"></canvas><div class="chart-sub">الفرق التي لم تُخرج بعد</div></div>
-                    <!-- 2. نقاط الفريق (نظام 3-1-0) -->
-                    <div class="chart-box"><div class="chart-title">⭐ نقاط الفرق</div><canvas id="chartTeamPoints"></canvas><div class="chart-sub">ترتيب الفرق حسب النقاط</div></div>
-                    <!-- 3. أداء اللاعبين (دقة vs توقعات) -->
-                    <div class="chart-box"><div class="chart-title">🎯 أداء اللاعبين</div><canvas id="chartPlayerPerformance"></canvas><div class="chart-sub">الدقة مقابل عدد التوقعات</div></div>
-                    <!-- 4. توزيع التوقعات (فوز/تعادل/خسارة) -->
-                    <div class="chart-box"><div class="chart-title">📊 توزيع توقعات اللاعبين</div><canvas id="chartPredictionDistribution"></canvas><div class="chart-sub">نسبة التوقعات لكل نتيجة</div></div>
-                    <!-- 5. أكثر الفرق توقعاً بالفوز -->
-                    <div class="chart-box"><div class="chart-title">🔮 أكثر الفرق توقعاً</div><canvas id="chartMostPredicted"></canvas><div class="chart-sub">عدد التوقعات لكل فريق</div></div>
-                    <!-- 6. مقارنة دقة اللاعبين (أعلى 8) -->
-                    <div class="chart-box"><div class="chart-title">🥇 دقة اللاعبين (أعلى 8)</div><canvas id="chartTopAccuracy"></canvas><div class="chart-sub">النسبة المئوية للصحيحات</div></div>
+                    <!-- 1. توزيع نقاط اللاعبين -->
+                    <div class="chart-box"><div class="chart-title">🏆 توزيع النقاط</div><canvas id="chartPlayerPoints"></canvas><div class="chart-sub">نقاط كل لاعب</div></div>
+                    <!-- 2. نسبة النجاح لكل لاعب -->
+                    <div class="chart-box"><div class="chart-title">🎯 نسبة النجاح</div><canvas id="chartPlayerAccuracy"></canvas><div class="chart-sub">نسبة التوقعات الصحيحة</div></div>
+                    <!-- 3. عدد التوقعات لكل لاعب -->
+                    <div class="chart-box"><div class="chart-title">📊 عدد التوقعات</div><canvas id="chartPlayerTotals"></canvas><div class="chart-sub">إجمالي التوقعات لكل لاعب</div></div>
+                    <!-- 4. الصحيحة مقابل الخاطئة -->
+                    <div class="chart-box"><div class="chart-title">⚖️ الصحيحة vs الخاطئة</div><canvas id="chartCorrectVsWrong"></canvas><div class="chart-sub">مقارنة التوقعات الصحيحة والخاطئة</div></div>
+                    <!-- 5. أداء أفضل 8 لاعبين (نقاط + دقة) -->
+                    <div class="chart-box"><div class="chart-title">⭐ أداء أفضل 8</div><canvas id="chartTop8Performance"></canvas><div class="chart-sub">النقاط والدقة لأفضل 8 لاعبين</div></div>
+                    <!-- 6. توزيع الألقاب بين اللاعبين -->
+                    <div class="chart-box"><div class="chart-title">🏷️ توزيع الألقاب</div><canvas id="chartTitlesDistribution"></canvas><div class="chart-sub">عدد اللاعبين لكل لقب</div></div>
                 </div>
             </div>
         </div>
@@ -1752,7 +1752,8 @@
         }
 
         // ============================================================
-        //  حساب بيانات اللاعبين
+        //  حساب بيانات اللاعبين مع ترتيب غير مكرر
+        //  المعيار: النقاط أولاً، ثم نسبة النجاح عند التعادل
         // ============================================================
         function calculatePlayersData() {
             const predictions = state.predictions || [];
@@ -1768,7 +1769,19 @@
                 if (result.isCorrect) { scores[p.user_name].points++;
                     scores[p.user_name].correct++; } else if (result.predictionTeam !== null) { scores[p.user_name].wrong++; }
             }
-            const board = Object.values(scores).sort((a, b) => b.points - a.points || (b.correct - a.correct));
+            // الترتيب: النقاط أولاً، ثم نسبة النجاح (الدقة) عند التعادل
+            const board = Object.values(scores).sort((a, b) => {
+                if (b.points !== a.points) return b.points - a.points;
+                const accA = a.total > 0 ? (a.correct / a.total) : 0;
+                const accB = b.total > 0 ? (b.correct / b.total) : 0;
+                return accB - accA;
+            });
+
+            // حساب المراكز (ترتيب غير مكرر - كل لاعب له مركز فريد)
+            board.forEach((player, index) => {
+                player.rank = index + 1;
+            });
+
             let totalPoints = 0,
                 maxPoints = 0,
                 totalAccuracy = 0,
@@ -1846,16 +1859,6 @@
             }
             document.getElementById('lbTotalPlayers').textContent = board.length;
             document.getElementById('lbTotalPredictions').textContent = data.totalPredictions;
-            let rank = 1,
-                i = 0;
-            while (i < board.length) {
-                let j = i,
-                    points = board[i].points;
-                while (j < board.length && board[j].points === points) j++;
-                for (let k = i; k < j; k++) board[k].rank = rank;
-                i = j;
-                rank += (j - i + 1);
-            }
             const currentUser = localStorage.getItem('lastUserName') || '';
             const topThree = board.slice(0, 3);
             const rest = board.slice(3, 10);
@@ -1895,16 +1898,12 @@
                     let rankClass = rankNum === 1 ? 'gold' : rankNum === 2 ? 'silver' : rankNum === 3 ? 'bronze' : '';
                     let borderClass = rankNum === 1 ? 'gold-border' : rankNum === 2 ? 'silver-border' : rankNum === 3 ?
                         'bronze-border' : '';
-                    const isTie = board.filter(p => p.rank === rankNum).length > 1;
-                    const tieBadge = isTie ? ' ⚡' : '';
                     const title = getPlayerTitle(player, idx + 1, board.length);
                     html += `<div class="player-card" onclick="openPlayerPredictions('${player.name}')">
-                        <div class="rank ${rankClass}">${medal}${tieBadge}</div>
+                        <div class="rank ${rankClass}">${medal}</div>
                         <div class="avatar-sm ${borderClass}">${player.name.charAt(0).toUpperCase()}</div>
                         <div class="info-sm">
-                            <div class="name-sm">${player.name} ${isCurrentUser ? '👤' : ''}
-                                ${isTie ? `<span class="mini-badge">⚡ متعادل</span>` : ''}
-                            </div>
+                            <div class="name-sm">${player.name} ${isCurrentUser ? '👤' : ''}</div>
                             <div class="achievement"><span class="achievement-badge">${title}</span></div>
                             <div class="sub-sm"><span>✅ <span class="highlight">${player.correct}</span></span><span>📊 ${player.total}</span><span>🎯 ${accuracy}%</span></div>
                             <div class="progress-mini"><div class="fill-mini" style="width:${Math.min(accuracy,100)}%;"></div></div>
@@ -1937,7 +1936,7 @@
             let html = '';
             board.forEach((p, idx) => {
                 const acc = p.total > 0 ? Math.round((p.correct / p.total) * 100) : 0;
-                const rankNum = idx + 1;
+                const rankNum = p.rank || idx + 1;
                 let medal = rankNum === 1 ? '🥇' : rankNum === 2 ? '🥈' : rankNum === 3 ? '🥉' : `#${rankNum}`;
                 const title = getPlayerTitle(p, idx, board.length);
                 html +=
@@ -1974,280 +1973,146 @@
         }
 
         // ============================================================
-        //  CHARTS – 6 أنواع متنوعة
+        //  CHARTS – 6 رسوم بيانية تركز على أداء المتسابقين فقط
         // ============================================================
         function updateAllCharts() {
-            updateChartTeamResults();
-            updateChartTeamPoints();
-            updateChartPlayerPerformance();
-            updateChartPredictionDistribution();
-            updateChartMostPredicted();
-            updateChartTopAccuracy();
+            updateChartPlayerPoints();
+            updateChartPlayerAccuracy();
+            updateChartPlayerTotals();
+            updateChartCorrectVsWrong();
+            updateChartTop8Performance();
+            updateChartTitlesDistribution();
         }
 
-        // 1. نتائج الفرق المتبقية (استبعاد الفرق التي خرجت)
-        function getEliminatedTeams() {
-            // بناءً على مباريات خروج المغلوب: الفرق التي خسرت في الأدوار الإقصائية
-            // نحدد الفرق التي خسرت في أي مباراة (بافتراض أن كل خسارة تعني خروج إذا كانت في الأدوار النهائية)
-            // نستخدم مجموعة الفرق التي ظهرت في المباريات المنتهية ونستبعد التي ليس لديها أي فوز أو تعادل؟
-            // لكن الطريقة الأدق: الفرق التي خسرت في آخر مباراة لها (خروج)
-            const games = state.previousGamesData || [];
-            const eliminated = new Set();
-            // نأخذ الفرق التي خسرت في آخر مباراة لها (حسب الترتيب الزمني)
-            const teamLastGame = {};
-            for (let g of games) {
-                const winner = determineWinner(g);
-                if (winner) {
-                    if (!teamLastGame[g.homeAr] || g.sortTimestamp > teamLastGame[g.homeAr].timestamp) {
-                        teamLastGame[g.homeAr] = { result: winner === g.homeAr ? 'win' : 'loss', timestamp: g.sortTimestamp };
-                    }
-                    if (!teamLastGame[g.awayAr] || g.sortTimestamp > teamLastGame[g.awayAr].timestamp) {
-                        teamLastGame[g.awayAr] = { result: winner === g.awayAr ? 'win' : 'loss', timestamp: g.sortTimestamp };
-                    }
-                } else {
-                    // تعادل
-                    if (!teamLastGame[g.homeAr] || g.sortTimestamp > teamLastGame[g.homeAr].timestamp) {
-                        teamLastGame[g.homeAr] = { result: 'draw', timestamp: g.sortTimestamp };
-                    }
-                    if (!teamLastGame[g.awayAr] || g.sortTimestamp > teamLastGame[g.awayAr].timestamp) {
-                        teamLastGame[g.awayAr] = { result: 'draw', timestamp: g.sortTimestamp };
-                    }
-                }
-            }
-            // الفرق التي خسرت في آخر مباراة تعتبر مخرجة (ما لم تكن في دور المجموعات، لكننا نعتبر كل خسارة إقصاء)
-            // لكن لتجنب استبعاد فرق لم تلعب كافي، نأخذ فقط الفرق التي لها أكثر من مباراة
-            const teamsWithGames = Object.keys(teamLastGame);
-            for (let team of teamsWithGames) {
-                if (teamLastGame[team].result === 'loss') {
-                    // تأكد من أنها لعبت أكثر من مباراة (لتجنب الفرق التي لعبت مباراة واحدة فقط)
-                    const gamesPlayed = games.filter(g => g.homeAr === team || g.awayAr === team).length;
-                    if (gamesPlayed > 1) eliminated.add(team);
-                }
-            }
-            // إضافة المغرب يدوياً (معروف أنه خرج)
-            eliminated.add("المغرب");
-            return eliminated;
-        }
-
-        function getRemainingTeams() {
-            const allTeams = new Set();
-            for (let g of state.previousGamesData) {
-                allTeams.add(g.homeAr);
-                allTeams.add(g.awayAr);
-            }
-            const eliminated = getEliminatedTeams();
-            const remaining = new Set([...allTeams].filter(t => !eliminated.has(t)));
-            return remaining;
-        }
-
-        function updateChartTeamResults() {
-            const canvas = document.getElementById('chartTeamResults');
-            if (chartInstances.teamResults) { chartInstances.teamResults.destroy();
-                delete chartInstances.teamResults; }
-            const remaining = getRemainingTeams();
-            const games = state.previousGamesData || [];
-            const stats = {};
-            for (let g of games) {
-                if (!remaining.has(g.homeAr) || !remaining.has(g.awayAr)) continue;
-                if (!stats[g.homeAr]) stats[g.homeAr] = { wins: 0, draws: 0, losses: 0 };
-                if (!stats[g.awayAr]) stats[g.awayAr] = { wins: 0, draws: 0, losses: 0 };
-                const winner = determineWinner(g);
-                if (!winner) { stats[g.homeAr].draws++;
-                    stats[g.awayAr].draws++; } else if (winner === g.homeAr) { stats[g.homeAr].wins++;
-                    stats[g.awayAr].losses++; } else { stats[g.awayAr].wins++;
-                    stats[g.homeAr].losses++; }
-            }
-            const sorted = Object.entries(stats).sort((a, b) => (b[1].wins + b[1].draws) - (a[1].wins + a[1].draws)).slice(0,
-            10);
-            const labels = sorted.map(([name]) => name);
-            const wins = sorted.map(([, s]) => s.wins);
-            const draws = sorted.map(([, s]) => s.draws);
-            const losses = sorted.map(([, s]) => s.losses);
+        // 1. توزيع نقاط اللاعبين
+        function updateChartPlayerPoints() {
+            const canvas = document.getElementById('chartPlayerPoints');
+            if (chartInstances.playerPoints) { chartInstances.playerPoints.destroy();
+                delete chartInstances.playerPoints; }
+            const data = calculatePlayersData();
+            const board = data.board || [];
+            if (board.length === 0) return;
+            const labels = board.map(p => p.name);
+            const points = board.map(p => p.points);
             const isDark = document.documentElement.getAttribute('data-theme') === 'light' ? false : true;
             const textColor = isDark ? '#8aa0c0' : '#3d5a78';
             const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)';
             const ctx = canvas.getContext('2d');
-            chartInstances.teamResults = new Chart(ctx, {
+            chartInstances.playerPoints = new Chart(ctx, {
                 type: 'bar',
-                data: { labels, datasets: [{ label: '🏆 فوز', data: wins, backgroundColor: 'rgba(49,214,122,0.7)', borderColor: 'rgba(49,214,122,1)', borderWidth: 1 }, { label: '⚖️ تعادل', data: draws, backgroundColor: 'rgba(245,166,35,0.7)', borderColor: 'rgba(245,166,35,1)', borderWidth: 1 }, { label: '❌ خسارة', data: losses, backgroundColor: 'rgba(242,90,106,0.7)', borderColor: 'rgba(242,90,106,1)', borderWidth: 1 }] },
-                options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: textColor, font: { family: 'Cairo', size: 8 }, boxWidth: 10, padding: 4 } } }, scales: { y: { beginAtZero: true, ticks: { color: textColor, font: { family: 'Cairo', size: 7 }, stepSize: 1 }, grid: { color: gridColor } }, x: { ticks: { color: textColor, font: { family: 'Cairo', size: 7 }, maxRotation: 25, minRotation: 0 }, grid: { display: false } } } }
-            });
-        }
-
-        function updateChartTeamPoints() {
-            const canvas = document.getElementById('chartTeamPoints');
-            if (chartInstances.teamPoints) { chartInstances.teamPoints.destroy();
-                delete chartInstances.teamPoints; }
-            const remaining = getRemainingTeams();
-            const games = state.previousGamesData || [];
-            const points = {};
-            for (let g of games) {
-                if (!remaining.has(g.homeAr) || !remaining.has(g.awayAr)) continue;
-                if (!points[g.homeAr]) points[g.homeAr] = 0;
-                if (!points[g.awayAr]) points[g.awayAr] = 0;
-                const winner = determineWinner(g);
-                if (!winner) { points[g.homeAr] += 1;
-                    points[g.awayAr] += 1; } else if (winner === g.homeAr) { points[g.homeAr] += 3; } else { points[g.awayAr] +=
-                    3; }
-            }
-            const sorted = Object.entries(points).sort((a, b) => b[1] - a[1]).slice(0, 10);
-            const labels = sorted.map(([name]) => name);
-            const data = sorted.map(([, p]) => p);
-            const isDark = document.documentElement.getAttribute('data-theme') === 'light' ? false : true;
-            const textColor = isDark ? '#8aa0c0' : '#3d5a78';
-            const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)';
-            const ctx = canvas.getContext('2d');
-            chartInstances.teamPoints = new Chart(ctx, {
-                type: 'bar',
-                data: { labels, datasets: [{ label: '⭐ نقاط', data, backgroundColor: 'rgba(212,167,69,0.7)', borderColor: '#e4b34a', borderWidth: 2 }] },
+                data: { labels, datasets: [{ label: '🏆 النقاط', data: points, backgroundColor: 'rgba(212,167,69,0.7)', borderColor: '#e4b34a', borderWidth: 2 }] },
                 options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: textColor, font: { family: 'Cairo', size: 8 }, boxWidth: 10 } } }, scales: { y: { beginAtZero: true, ticks: { color: textColor, font: { family: 'Cairo', size: 7 }, stepSize: 1 }, grid: { color: gridColor } }, x: { ticks: { color: textColor, font: { family: 'Cairo', size: 7 }, maxRotation: 25 }, grid: { display: false } } } }
             });
         }
 
-        function updateChartPlayerPerformance() {
-            const canvas = document.getElementById('chartPlayerPerformance');
-            if (chartInstances.playerPerformance) { chartInstances.playerPerformance.destroy();
-                delete chartInstances.playerPerformance; }
+        // 2. نسبة النجاح لكل لاعب
+        function updateChartPlayerAccuracy() {
+            const canvas = document.getElementById('chartPlayerAccuracy');
+            if (chartInstances.playerAccuracy) { chartInstances.playerAccuracy.destroy();
+                delete chartInstances.playerAccuracy; }
             const data = calculatePlayersData();
             const board = data.board || [];
-            const top = board.slice(0, 12);
-            const labels = top.map(p => p.name);
-            const accuracies = top.map(p => p.total > 0 ? Math.round((p.correct / p.total) * 100) : 0);
-            const totals = top.map(p => p.total);
+            if (board.length === 0) return;
+            const labels = board.map(p => p.name);
+            const accuracies = board.map(p => p.total > 0 ? Math.round((p.correct / p.total) * 100) : 0);
             const isDark = document.documentElement.getAttribute('data-theme') === 'light' ? false : true;
             const textColor = isDark ? '#8aa0c0' : '#3d5a78';
             const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)';
             const ctx = canvas.getContext('2d');
-            chartInstances.playerPerformance = new Chart(ctx, {
-                type: 'scatter',
-                data: {
-                    datasets: [{
-                        label: 'الدقة vs التوقعات',
-                        data: top.map((p, i) => ({ x: p.total, y: p.total > 0 ? Math.round((p.correct / p.total) * 100) :
-                                0, label: p.name })),
-                        backgroundColor: 'rgba(212,167,69,0.7)',
-                        borderColor: '#e4b34a',
-                        borderWidth: 1,
-                        pointRadius: 5,
-                        pointHoverRadius: 8,
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: true,
-                    plugins: {
-                        legend: { labels: { color: textColor, font: { family: 'Cairo', size: 8 }, boxWidth: 10 } },
-                        tooltip: { callbacks: { label: function(context) { const point = context.raw; return `${point.label || ''} - دقة: ${point.y}% - توقعات: ${point.x}`; } } }
-                    },
-                    scales: {
-                        x: { title: { display: true, text: 'عدد التوقعات', color: textColor, font: { family: 'Cairo',
-                                    size: 7 } }, ticks: { color: textColor, font: { family: 'Cairo', size: 7 } },
-                            grid: { color: gridColor } },
-                        y: { title: { display: true, text: 'نسبة النجاح (%)', color: textColor, font: { family: 'Cairo',
-                                    size: 7 } }, min: 0, max: 100, ticks: { color: textColor, font: { family: 'Cairo',
-                                    size: 7 } }, grid: { color: gridColor } }
-                    }
-                }
+            chartInstances.playerAccuracy = new Chart(ctx, {
+                type: 'bar',
+                data: { labels, datasets: [{ label: '🎯 نسبة النجاح %', data: accuracies, backgroundColor: 'rgba(49,214,122,0.7)', borderColor: '#31d67a', borderWidth: 2 }] },
+                options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: textColor, font: { family: 'Cairo', size: 8 }, boxWidth: 10 } } }, scales: { y: { beginAtZero: true, max: 100, ticks: { color: textColor, font: { family: 'Cairo', size: 7 }, stepSize: 10 }, grid: { color: gridColor } }, x: { ticks: { color: textColor, font: { family: 'Cairo', size: 7 }, maxRotation: 25 }, grid: { display: false } } } }
             });
         }
 
-        function updateChartPredictionDistribution() {
-            const canvas = document.getElementById('chartPredictionDistribution');
-            if (chartInstances.predDistribution) { chartInstances.predDistribution.destroy();
-                delete chartInstances.predDistribution; }
-            const predictions = state.predictions || [];
-            let home = 0,
-                away = 0,
-                draw = 0;
-            for (let p of predictions) {
-                const pred = p.prediction;
-                if (pred === 'HOME') home++;
-                else if (pred === 'AWAY') away++;
-                else if (pred === 'DRAW') draw++;
-                else {
-                    // قد يكون اسم فريق
-                    const result = findMatchResult('', '');
-                    const team = resolvePredictionTeam(pred, result);
-                    if (team === 'DRAW') draw++;
-                    else if (team && team !== 'HOME' && team !== 'AWAY') away++; // اعتباراً كفوز
-                }
-            }
+        // 3. عدد التوقعات لكل لاعب
+        function updateChartPlayerTotals() {
+            const canvas = document.getElementById('chartPlayerTotals');
+            if (chartInstances.playerTotals) { chartInstances.playerTotals.destroy();
+                delete chartInstances.playerTotals; }
+            const data = calculatePlayersData();
+            const board = data.board || [];
+            if (board.length === 0) return;
+            const labels = board.map(p => p.name);
+            const totals = board.map(p => p.total);
             const isDark = document.documentElement.getAttribute('data-theme') === 'light' ? false : true;
             const textColor = isDark ? '#8aa0c0' : '#3d5a78';
+            const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)';
             const ctx = canvas.getContext('2d');
-            chartInstances.predDistribution = new Chart(ctx, {
+            chartInstances.playerTotals = new Chart(ctx, {
+                type: 'bar',
+                data: { labels, datasets: [{ label: '📊 عدد التوقعات', data: totals, backgroundColor: 'rgba(74,158,255,0.7)', borderColor: '#4a9eff', borderWidth: 2 }] },
+                options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: textColor, font: { family: 'Cairo', size: 8 }, boxWidth: 10 } } }, scales: { y: { beginAtZero: true, ticks: { color: textColor, font: { family: 'Cairo', size: 7 }, stepSize: 1 }, grid: { color: gridColor } }, x: { ticks: { color: textColor, font: { family: 'Cairo', size: 7 }, maxRotation: 25 }, grid: { display: false } } } }
+            });
+        }
+
+        // 4. الصحيحة مقابل الخاطئة
+        function updateChartCorrectVsWrong() {
+            const canvas = document.getElementById('chartCorrectVsWrong');
+            if (chartInstances.correctVsWrong) { chartInstances.correctVsWrong.destroy();
+                delete chartInstances.correctVsWrong; }
+            const data = calculatePlayersData();
+            const board = data.board || [];
+            if (board.length === 0) return;
+            const labels = board.map(p => p.name);
+            const correct = board.map(p => p.correct);
+            const wrong = board.map(p => p.wrong);
+            const isDark = document.documentElement.getAttribute('data-theme') === 'light' ? false : true;
+            const textColor = isDark ? '#8aa0c0' : '#3d5a78';
+            const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)';
+            const ctx = canvas.getContext('2d');
+            chartInstances.correctVsWrong = new Chart(ctx, {
+                type: 'bar',
+                data: { labels, datasets: [{ label: '✅ صحيحة', data: correct, backgroundColor: 'rgba(49,214,122,0.7)', borderColor: '#31d67a', borderWidth: 1 }, { label: '❌ خاطئة', data: wrong, backgroundColor: 'rgba(242,90,106,0.7)', borderColor: '#f25a6a', borderWidth: 1 }] },
+                options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: textColor, font: { family: 'Cairo', size: 8 }, boxWidth: 10 } } }, scales: { y: { beginAtZero: true, ticks: { color: textColor, font: { family: 'Cairo', size: 7 }, stepSize: 1 }, grid: { color: gridColor } }, x: { ticks: { color: textColor, font: { family: 'Cairo', size: 7 }, maxRotation: 25 }, grid: { display: false } } } }
+            });
+        }
+
+        // 5. أداء أفضل 8 لاعبين (نقاط + دقة)
+        function updateChartTop8Performance() {
+            const canvas = document.getElementById('chartTop8Performance');
+            if (chartInstances.top8Performance) { chartInstances.top8Performance.destroy();
+                delete chartInstances.top8Performance; }
+            const data = calculatePlayersData();
+            const board = data.board || [];
+            if (board.length === 0) return;
+            const top8 = board.slice(0, 8);
+            const labels = top8.map(p => p.name);
+            const points = top8.map(p => p.points);
+            const accuracies = top8.map(p => p.total > 0 ? Math.round((p.correct / p.total) * 100) : 0);
+            const isDark = document.documentElement.getAttribute('data-theme') === 'light' ? false : true;
+            const textColor = isDark ? '#8aa0c0' : '#3d5a78';
+            const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)';
+            const ctx = canvas.getContext('2d');
+            chartInstances.top8Performance = new Chart(ctx, {
+                type: 'bar',
+                data: { labels, datasets: [{ label: '🏆 نقاط', data: points, backgroundColor: 'rgba(212,167,69,0.7)', borderColor: '#e4b34a', borderWidth: 1 }, { label: '🎯 نسبة النجاح %', data: accuracies, backgroundColor: 'rgba(49,214,122,0.7)', borderColor: '#31d67a', borderWidth: 1 }] },
+                options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: textColor, font: { family: 'Cairo', size: 8 }, boxWidth: 10 } } }, scales: { y: { beginAtZero: true, ticks: { color: textColor, font: { family: 'Cairo', size: 7 } }, grid: { color: gridColor } }, x: { ticks: { color: textColor, font: { family: 'Cairo', size: 7 }, maxRotation: 25 }, grid: { display: false } } } }
+            });
+        }
+
+        // 6. توزيع الألقاب بين اللاعبين
+        function updateChartTitlesDistribution() {
+            const canvas = document.getElementById('chartTitlesDistribution');
+            if (chartInstances.titlesDistribution) { chartInstances.titlesDistribution.destroy();
+                delete chartInstances.titlesDistribution; }
+            const data = calculatePlayersData();
+            const board = data.board || [];
+            if (board.length === 0) return;
+            const titleCount = {};
+            board.forEach((p, idx) => { const title = getPlayerTitle(p, idx, board.length);
+                titleCount[title] = (titleCount[title] || 0) + 1; });
+            const labels = Object.keys(titleCount);
+            const counts = Object.values(titleCount);
+            const isDark = document.documentElement.getAttribute('data-theme') === 'light' ? false : true;
+            const textColor = isDark ? '#8aa0c0' : '#3d5a78';
+            const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)';
+            const ctx = canvas.getContext('2d');
+            chartInstances.titlesDistribution = new Chart(ctx, {
                 type: 'doughnut',
-                data: {
-                    labels: ['🏠 فوز الفريق الأول', '✈️ فوز الفريق الثاني', '🤝 تعادل'],
-                    datasets: [{ data: [home, away, draw], backgroundColor: ['rgba(49,214,122,0.7)', 'rgba(242,90,106,0.7)',
-                            'rgba(245,166,35,0.7)'
-                        ], borderColor: ['#31d67a', '#f25a6a', '#f5a623'], borderWidth: 1 }]
-                },
-                options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: textColor,
-                                font: { family: 'Cairo', size: 8 }, boxWidth: 10 } } } }
-            });
-        }
-
-        function updateChartMostPredicted() {
-            const canvas = document.getElementById('chartMostPredicted');
-            if (chartInstances.mostPredicted) { chartInstances.mostPredicted.destroy();
-                delete chartInstances.mostPredicted; }
-            const predictions = state.predictions || [];
-            const teamCount = {};
-            for (let p of predictions) {
-                const parts = (p.match_id || "").split("_");
-                if (parts.length >= 3) {
-                    const t1 = translateToArabic(parts[1]);
-                    const t2 = translateToArabic(parts[2]);
-                    teamCount[t1] = (teamCount[t1] || 0) + 1;
-                    teamCount[t2] = (teamCount[t2] || 0) + 1;
-                }
-            }
-            const sorted = Object.entries(teamCount).sort((a, b) => b[1] - a[1]).slice(0, 10);
-            const labels = sorted.map(([name]) => name);
-            const data = sorted.map(([, count]) => count);
-            const isDark = document.documentElement.getAttribute('data-theme') === 'light' ? false : true;
-            const textColor = isDark ? '#8aa0c0' : '#3d5a78';
-            const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)';
-            const ctx = canvas.getContext('2d');
-            chartInstances.mostPredicted = new Chart(ctx, {
-                type: 'bar',
-                data: { labels, datasets: [{ label: 'عدد التوقعات', data, backgroundColor: 'rgba(74,158,255,0.7)',
-                        borderColor: '#4a9eff', borderWidth: 1 }] },
-                options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: textColor,
-                                font: { family: 'Cairo', size: 8 }, boxWidth: 10 } } }, scales: { y: { beginAtZero: true,
-                                ticks: { color: textColor, font: { family: 'Cairo', size: 7 }, stepSize: 1 },
-                                grid: { color: gridColor } }, x: { ticks: { color: textColor, font: { family: 'Cairo',
-                                    size: 7 }, maxRotation: 25 }, grid: { display: false } } } }
-            });
-        }
-
-        function updateChartTopAccuracy() {
-            const canvas = document.getElementById('chartTopAccuracy');
-            if (chartInstances.topAccuracy) { chartInstances.topAccuracy.destroy();
-                delete chartInstances.topAccuracy; }
-            const data = calculatePlayersData();
-            const board = data.board || [];
-            const top = board.filter(p => p.total >= 3).sort((a, b) => {
-                const accA = a.total > 0 ? (a.correct / a.total) : 0;
-                const accB = b.total > 0 ? (b.correct / b.total) : 0;
-                return accB - accA;
-            }).slice(0, 8);
-            const labels = top.map(p => p.name);
-            const accuracies = top.map(p => p.total > 0 ? Math.round((p.correct / p.total) * 100) : 0);
-            const isDark = document.documentElement.getAttribute('data-theme') === 'light' ? false : true;
-            const textColor = isDark ? '#8aa0c0' : '#3d5a78';
-            const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)';
-            const ctx = canvas.getContext('2d');
-            chartInstances.topAccuracy = new Chart(ctx, {
-                type: 'bar',
-                data: { labels, datasets: [{ label: 'نسبة الصحيحات (%)', data: accuracies, backgroundColor: 'rgba(212,167,69,0.7)',
-                        borderColor: '#e4b34a', borderWidth: 2 }] },
-                options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: textColor,
-                                font: { family: 'Cairo', size: 8 }, boxWidth: 10 } } }, scales: { y: { beginAtZero: true,
-                                max: 100, ticks: { color: textColor, font: { family: 'Cairo', size: 7 },
-                                    stepSize: 10 }, grid: { color: gridColor } }, x: { ticks: { color: textColor,
-                                    font: { family: 'Cairo', size: 7 }, maxRotation: 25 }, grid: { display: false } } } }
+                data: { labels, datasets: [{ data: counts, backgroundColor: ['rgba(212,167,69,0.7)', 'rgba(49,214,122,0.7)', 'rgba(74,158,255,0.7)', 'rgba(245,166,35,0.7)', 'rgba(242,90,106,0.7)', 'rgba(155,89,182,0.7)'] }] },
+                options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: textColor, font: { family: 'Cairo', size: 8 }, boxWidth: 10 } } } }
             });
         }
 
